@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>MagHaptic — Field → Vibration</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06080f; --panel: #0b1120; --border: #162035;
+    --mag: #38bdf8; --vib: #f97316; --accent: #a78bfa;
+    --ok: #22c55e; --danger: #ff5e5b; --warn: #facc15;
+    --text: #c8dff0; --dim: #3d5a75;
+    --glow-mag: rgba(56,189,248,0.28); --glow-vib: rgba(249,115,22,0.28); --glow-acc: rgba(167,139,250,0.25);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh; padding: 1rem; overflow-x: hidden;
+  }
+
+  /* Subtle hex grid background */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(56,189,248,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,0.02) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* Ambient field glow — intensity driven by JS custom property */
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 80% 50% at 50% 0%,
+      rgba(56,189,248, var(--field-glow, 0)) 0%, transparent 70%);
+    transition: background 0.3s;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 500px; margin: 0 auto; }
+
+  /* Header */
+  h1 {
+    font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: clamp(0.9rem, 4.5vw, 1.2rem); letter-spacing: 0.06em;
+    text-align: center; padding: 1rem 0 0.25rem;
+    background: linear-gradient(90deg, var(--mag), var(--accent), var(--vib));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .subtitle { text-align: center; font-size: 0.6rem; color: var(--dim); letter-spacing: 0.28em; text-transform: uppercase; margin-bottom: 1.4rem; }
+
+  /* Banner */
+  .banner {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.65rem 1rem; margin-bottom: 1rem;
+    display: flex; align-items: center; gap: 10px; font-size: 0.63rem;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; transition: all 0.3s; }
+  .dot.ok      { background: var(--ok);     box-shadow: 0 0 7px var(--ok); }
+  .dot.no      { background: var(--danger); box-shadow: 0 0 7px var(--danger); }
+  .dot.pending { background: var(--warn);   box-shadow: 0 0 7px var(--warn); animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+
+  /* ── BIG FIELD DISPLAY ── */
+  .field-display {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.4rem 1.2rem 1rem; margin-bottom: 1rem; position: relative; overflow: hidden;
+  }
+  .field-display::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--mag), transparent);
+  }
+
+  .field-total-wrap { display: flex; align-items: flex-end; justify-content: center; gap: 8px; margin-bottom: 0.5rem; }
+  .field-total {
+    font-family: 'Orbitron', sans-serif; font-weight: 900;
+    font-size: clamp(2.8rem, 14vw, 4rem);
+    color: var(--mag); line-height: 1;
+    text-shadow: 0 0 30px var(--glow-mag);
+    transition: color 0.2s, text-shadow 0.2s;
+  }
+  .field-unit { font-family: 'Orbitron', sans-serif; font-size: 0.85rem; color: var(--dim); padding-bottom: 8px; }
+
+  /* XYZ components */
+  .xyz-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.8rem; }
+  .xyz-box { background: #050a0e; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.6rem; text-align: center; }
+  .xyz-lbl { font-size: 0.48rem; color: var(--dim); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 3px; }
+  .xyz-val { font-family: 'Orbitron', sans-serif; font-size: 0.78rem; color: var(--mag); transition: color 0.15s; }
+  .xyz-box.axis-x .xyz-val { color: #f87171; }
+  .xyz-box.axis-y .xyz-val { color: #4ade80; }
+  .xyz-box.axis-z .xyz-val { color: #60a5fa; }
+
+  /* Range bar (min-max) */
+  .range-bar-wrap { display: flex; align-items: center; gap: 8px; font-size: 0.52rem; color: var(--dim); margin-bottom: 0.3rem; }
+  .range-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .range-fill { height: 100%; background: linear-gradient(90deg, var(--mag), var(--accent)); border-radius: 3px; transition: width 0.15s; }
+
+  /* History sparkline */
+  #sparkline { width: 100%; height: 52px; display: block; border-radius: 4px; background: #030507; border: 1px solid var(--border); margin-bottom: 0; }
+
+  /* ── MAPPING CONFIG ── */
+  .map-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.1rem 1.2rem; margin-bottom: 1rem; position: relative; overflow: hidden;
+  }
+  .map-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--vib), transparent);
+  }
+  .section-label {
+    font-family: 'Orbitron', sans-serif; font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.2em; color: var(--vib); margin-bottom: 0.9rem;
+  }
+
+  .map-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 0.7rem; }
+  .map-param { background: #050a0e; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.7rem; }
+  .map-lbl { font-size: 0.48rem; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 4px; }
+  .map-val { font-family: 'Orbitron', sans-serif; font-size: 0.8rem; color: var(--vib); text-align: right; margin-bottom: 4px; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+    border-radius: 2px; outline: none; cursor: pointer;
+    background: linear-gradient(90deg, var(--vib) var(--pct,50%), var(--border) var(--pct,50%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--vib); border: 2px solid var(--bg);
+    box-shadow: 0 0 8px var(--glow-vib); cursor: pointer;
+  }
+  .map-param.mag-param input[type=range] {
+    background: linear-gradient(90deg, var(--mag) var(--pct,50%), var(--border) var(--pct,50%));
+  }
+  .map-param.mag-param input[type=range]::-webkit-slider-thumb {
+    background: var(--mag); box-shadow: 0 0 8px var(--glow-mag);
+  }
+  .map-param.mag-param .map-val { color: var(--mag); }
+
+  /* Mapping curve selector */
+  .curve-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 0.4rem; margin-bottom: 0.8rem; }
+  .curve-btn {
+    background: #050a0e; border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.5rem 0.3rem; cursor: pointer; transition: all 0.2s;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .curve-btn:hover { border-color: var(--accent); }
+  .curve-btn.active-curve { border-color: var(--accent); background: rgba(167,139,250,0.07); box-shadow: 0 0 8px var(--glow-acc); }
+  .curve-canvas { width: 48px; height: 30px; display: block; }
+  .curve-name { font-size: 0.44rem; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; text-align: center; }
+  .curve-btn.active-curve .curve-name { color: var(--accent); }
+
+  /* Mapping mode: what to modulate */
+  .modmap-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.4rem; margin-bottom: 0.8rem; }
+  .modmap-btn {
+    background: #050a0e; border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.5rem; cursor: pointer; transition: all 0.2s; text-align: center;
+    font-family: 'Share Tech Mono', monospace; font-size: 0.58rem; color: var(--dim);
+  }
+  .modmap-btn:hover { border-color: var(--vib); color: var(--vib); }
+  .modmap-btn.active-mod { border-color: var(--vib); color: var(--vib); background: rgba(249,115,22,0.07); box-shadow: 0 0 8px var(--glow-vib); }
+  .modmap-name { font-family: 'Orbitron', sans-serif; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.1em; }
+
+  /* ── LIVE MAPPING VIZ ── */
+  .viz-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.2rem; margin-bottom: 1rem; position: relative; overflow: hidden;
+  }
+  .viz-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--mag), var(--vib), transparent);
+  }
+  #mapCanvas { width: 100%; height: 100px; display: block; border-radius: 4px; background: #030507; border: 1px solid var(--border); }
+
+  /* ── CONTROLS ── */
+  .ctrl-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .fire-btn {
+    flex: 2; padding: 0.9rem; border-radius: 7px; border: 1.5px solid var(--mag);
+    background: rgba(56,189,248,0.07); color: var(--mag);
+    font-family: 'Orbitron', sans-serif; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.18em; cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 0 12px var(--glow-mag); display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .fire-btn:hover { background: rgba(56,189,248,0.15); box-shadow: 0 0 24px var(--glow-mag); }
+  .fire-btn.active { background: rgba(56,189,248,0.18); animation: activePulse 1.5s ease-in-out infinite; }
+  @keyframes activePulse { 0%,100%{box-shadow:0 0 12px var(--glow-mag)} 50%{box-shadow:0 0 28px rgba(56,189,248,0.5)} }
+  .stop-btn {
+    flex: 1; padding: 0.9rem; border-radius: 7px; border: 1px solid rgba(255,94,91,0.3);
+    background: rgba(255,94,91,0.05); color: var(--danger);
+    font-family: 'Orbitron', sans-serif; font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.12em; cursor: pointer; transition: all 0.2s;
+  }
+  .stop-btn:hover { border-color: var(--danger); background: rgba(255,94,91,0.12); box-shadow: 0 0 12px rgba(255,94,91,0.3); }
+
+  /* Calibrate strip */
+  .cal-row {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.8rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  }
+  .cal-info .cal-title { font-family: 'Orbitron', sans-serif; font-size: 0.62rem; color: var(--accent); letter-spacing: 0.15em; margin-bottom: 2px; }
+  .cal-info .cal-sub { font-size: 0.54rem; color: var(--dim); line-height: 1.5; }
+  .cal-btn {
+    background: transparent; border: 1px solid rgba(167,139,250,0.35); border-radius: 5px;
+    padding: 7px 14px; font-family: 'Share Tech Mono', monospace; font-size: 0.62rem;
+    letter-spacing: 0.1em; cursor: pointer; color: var(--accent); transition: all 0.2s; white-space: nowrap;
+  }
+  .cal-btn:hover { border-color: var(--accent); box-shadow: 0 0 10px var(--glow-acc); }
+
+  /* Status log */
+  .status-log {
+    background: #050a0e; border: 1px solid var(--border); border-radius: 6px;
+    padding: 0.6rem 0.8rem; height: 80px; overflow-y: auto; font-size: 0.58rem;
+    line-height: 1.65; color: var(--dim); margin-bottom: 1rem;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .log-e { display: flex; gap: 8px; }
+  .log-t { color: var(--mag); opacity: 0.7; flex-shrink: 0; }
+  .ok   { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--danger); } .info { color: var(--text); }
+
+  .footer { text-align: center; font-size: 0.52rem; color: var(--dim); letter-spacing: 0.15em; padding: 0.5rem 0 1.5rem; opacity: 0.4; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>MagHaptic</h1>
+  <p class="subtitle">Magnetic Field → Vibration Mapper</p>
+
+  <div class="banner" id="banner">
+    <div class="dot pending" id="bannerDot"></div>
+    <div id="bannerText" style="font-size:0.63rem">Tap START to request magnetometer & begin mapping</div>
+  </div>
+
+  <!-- ── FIELD DISPLAY ── -->
+  <div class="field-display">
+
+    <div class="field-total-wrap">
+      <div class="field-total" id="fieldTotal">0.0</div>
+      <div class="field-unit">μT</div>
+    </div>
+
+    <div class="xyz-row">
+      <div class="xyz-box axis-x">
+        <div class="xyz-lbl">X axis</div>
+        <div class="xyz-val" id="fx">0.0</div>
+      </div>
+      <div class="xyz-box axis-y">
+        <div class="xyz-lbl">Y axis</div>
+        <div class="xyz-val" id="fy">0.0</div>
+      </div>
+      <div class="xyz-box axis-z">
+        <div class="xyz-lbl">Z axis</div>
+        <div class="xyz-val" id="fz">0.0</div>
+      </div>
+    </div>
+
+    <div class="range-bar-wrap">
+      <span id="fieldMin">min: —</span>
+      <div class="range-bar"><div class="range-fill" id="rangeFill" style="width:0%"></div></div>
+      <span id="fieldMax">max: —</span>
+    </div>
+
+    <canvas id="sparkline"></canvas>
+  </div>
+
+  <!-- ── MAPPING CONFIG ── -->
+  <div class="map-card">
+    <div class="section-label">⊿ MAPPING CONFIG</div>
+
+    <!-- Field range thresholds -->
+    <div class="map-row">
+      <div class="map-param mag-param">
+        <div class="map-lbl">Field Min (μT)</div>
+        <div class="map-val" id="mapMinVal">20 μT</div>
+        <input type="range" id="mapMinSlider" min="0" max="200" step="1" value="20"
+          oninput="updateMapParam('min', this.value)" style="--pct:10%">
+      </div>
+      <div class="map-param mag-param">
+        <div class="map-lbl">Field Max (μT)</div>
+        <div class="map-val" id="mapMaxVal">80 μT</div>
+        <input type="range" id="mapMaxSlider" min="0" max="500" step="1" value="80"
+          oninput="updateMapParam('max', this.value)" style="--pct:16%">
+      </div>
+    </div>
+
+    <!-- Vibration output range -->
+    <div class="map-row">
+      <div class="map-param">
+        <div class="map-lbl">Vib Freq Min (Hz)</div>
+        <div class="map-val" id="vFreqMinVal">1 Hz</div>
+        <input type="range" id="vFreqMinSlider" min="1" max="20" step="1" value="1"
+          oninput="updateMapParam('vFreqMin', this.value)" style="--pct:0%">
+      </div>
+      <div class="map-param">
+        <div class="map-lbl">Vib Freq Max (Hz)</div>
+        <div class="map-val" id="vFreqMaxVal">20 Hz</div>
+        <input type="range" id="vFreqMaxSlider" min="1" max="30" step="1" value="20"
+          oninput="updateMapParam('vFreqMax', this.value)" style="--pct:63%">
+      </div>
+    </div>
+
+    <!-- What to modulate -->
+    <div style="font-size:0.52rem;color:var(--dim);margin-bottom:0.5rem;letter-spacing:0.1em">MODULATE →</div>
+    <div class="modmap-row">
+      <button class="modmap-btn active-mod" id="mod-freq"  onclick="selectMod('freq')">
+        <div class="modmap-name">FREQUENCY</div><div style="font-size:0.48rem;margin-top:2px">pulse rate</div>
+      </button>
+      <button class="modmap-btn" id="mod-amp"   onclick="selectMod('amp')">
+        <div class="modmap-name">AMPLITUDE</div><div style="font-size:0.48rem;margin-top:2px">duty cycle</div>
+      </button>
+      <button class="modmap-btn" id="mod-both"  onclick="selectMod('both')">
+        <div class="modmap-name">BOTH</div><div style="font-size:0.48rem;margin-top:2px">freq + amp</div>
+      </button>
+    </div>
+
+    <!-- Mapping curve -->
+    <div style="font-size:0.52rem;color:var(--dim);margin-bottom:0.5rem;letter-spacing:0.1em">CURVE →</div>
+    <div class="curve-row">
+      <button class="curve-btn active-curve" id="curve-linear"   onclick="selectCurve('linear')">
+        <canvas class="curve-canvas" id="cc-linear"></canvas><div class="curve-name">Linear</div>
+      </button>
+      <button class="curve-btn" id="curve-exp"      onclick="selectCurve('exp')">
+        <canvas class="curve-canvas" id="cc-exp"></canvas><div class="curve-name">Exp</div>
+      </button>
+      <button class="curve-btn" id="curve-log"      onclick="selectCurve('log')">
+        <canvas class="curve-canvas" id="cc-log"></canvas><div class="curve-name">Log</div>
+      </button>
+      <button class="curve-btn" id="curve-step"     onclick="selectCurve('step')">
+        <canvas class="curve-canvas" id="cc-step"></canvas><div class="curve-name">Step</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── LIVE MAPPING VIZ ── -->
+  <div class="viz-card">
+    <div style="font-family:'Orbitron',sans-serif;font-size:0.62rem;font-weight:700;color:var(--accent);letter-spacing:0.15em;margin-bottom:0.7rem">
+      ⊲ LIVE MAPPING
+    </div>
+    <canvas id="mapCanvas"></canvas>
+  </div>
+
+  <!-- ── CALIBRATE ── -->
+  <div class="cal-row">
+    <div class="cal-info">
+      <div class="cal-title">AUTO-CALIBRATE</div>
+      <div class="cal-sub">Scan environment for 5s to set<br>field min/max automatically</div>
+    </div>
+    <button class="cal-btn" id="calBtn" onclick="startCalibration()">⊙ CALIBRATE</button>
+  </div>
+
+  <!-- ── STATUS LOG ── -->
+  <div class="status-log" id="statusLog"></div>
+
+  <!-- ── CONTROLS ── -->
+  <div class="ctrl-row">
+    <button class="fire-btn" id="fireBtn" onclick="toggleMapping()">
+      <span id="fireLbl">▶ START MAPPING</span>
+    </button>
+    <button class="stop-btn" onclick="stopMapping()">■ STOP</button>
+  </div>
+
+  <div class="footer">MAGHAPTIC v1.0 · DEVICEORIENTATION MAGNETOMETER · VIBRATION API</div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────
+let active = false;
+let fx = 0, fy = 0, fz = 0, ftotal = 0;
+let fieldMin = Infinity, fieldMax = -Infinity;
+let history = []; // rolling 200-sample history
+const HIST_LEN = 200;
+
+// Mapping params
+let mapMin    = 20,   mapMax    = 80;
+let vFreqMin  = 1,    vFreqMax  = 20;
+let modTarget = 'freq';
+let curveType = 'linear';
+
+// Vibration engine
+let vibTimer  = null;
+
+// Calibration
+let calActive = false, calTimer = null;
+let calSamples = [];
+
+// ── Logging ───────────────────────────────────────────────────────────
+function log(msg, type='info') {
+  const box = document.getElementById('statusLog');
+  const now = new Date();
+  const ts  = now.toTimeString().slice(0,8);
+  const el  = document.createElement('div');
+  el.className = 'log-e';
+  el.innerHTML = `<span class="log-t">[${ts}]</span><span class="${type}">${msg}</span>`;
+  box.appendChild(el); box.scrollTop = box.scrollHeight;
+  while (box.children.length > 60) box.removeChild(box.firstChild);
+}
+
+// ── Mapping curves ────────────────────────────────────────────────────
+const CURVES = {
+  linear: t => t,
+  exp:    t => t * t,
+  log:    t => Math.sqrt(t),
+  step:   t => t < 0.33 ? 0 : t < 0.66 ? 0.5 : 1
+};
+
+function applyMapping(raw) {
+  const t = Math.max(0, Math.min(1, (raw - mapMin) / Math.max(1, mapMax - mapMin)));
+  return CURVES[curveType](t);
+}
+
+// ── Vibration engine ──────────────────────────────────────────────────
+function computeVibParams(mapped) {
+  const freq = vFreqMin + mapped * (vFreqMax - vFreqMin);
+  const amp  = 0.1 + mapped * 0.9; // 10%–100% duty cycle
+  return { freq, amp };
+}
+
+function buildPulse(freq, amp) {
+  const period  = Math.round(1000 / Math.max(0.5, freq));
+  const onTime  = Math.max(10, Math.round(period * amp));
+  const offTime = Math.max(5,  period - onTime);
+  return [onTime, offTime, onTime, offTime, onTime]; // 3 cycles
+}
+
+function fireVib(mapped) {
+  if (!active) return;
+  if (mapped < 0.01) { // below threshold — silence
+    if ('vibrate' in navigator) navigator.vibrate(0);
+    clearTimeout(vibTimer);
+    scheduleVib(mapped);
+    return;
+  }
+  const { freq, amp } = computeVibParams(mapped);
+  const pattern = buildPulse(freq, amp);
+  if ('vibrate' in navigator) navigator.vibrate(pattern);
+  const cycleDur = pattern.reduce((a, b) => a + b, 0);
+  scheduleVib(mapped, cycleDur + 20);
+}
+
+function scheduleVib(mapped, delay = 120) {
+  clearTimeout(vibTimer);
+  vibTimer = setTimeout(() => fireVib(applyMapping(ftotal)), delay);
+}
+
+// ── Magnetometer ──────────────────────────────────────────────────────
+function onMagEvent(e) {
+  fx = e.x ?? 0; fy = e.y ?? 0; fz = e.z ?? 0;
+  ftotal = Math.sqrt(fx*fx + fy*fy + fz*fz);
+
+  // Update min/max
+  if (ftotal > 0) {
+    if (ftotal < fieldMin) fieldMin = ftotal;
+    if (ftotal > fieldMax) fieldMax = ftotal;
+  }
+
+  // History
+  history.push(ftotal);
+  if (history.length > HIST_LEN) history.shift();
+
+  // Calibration sampling
+  if (calActive) calSamples.push(ftotal);
+
+  updateFieldUI();
+  drawSparkline();
+  drawMapCanvas();
+  updateAmbient();
+
+  if (active) fireVib(applyMapping(ftotal));
+}
+
+// ── UI Updates ────────────────────────────────────────────────────────
+function updateFieldUI() {
+  document.getElementById('fieldTotal').textContent = ftotal.toFixed(1);
+  document.getElementById('fx').textContent = fx.toFixed(1);
+  document.getElementById('fy').textContent = fy.toFixed(1);
+  document.getElementById('fz').textContent = fz.toFixed(1);
+
+  // Color the total by intensity relative to mapped range
+  const mapped = applyMapping(ftotal);
+  const r = Math.round(56  + mapped * (249-56));
+  const g = Math.round(189 + mapped * (115-189));
+  const b = Math.round(248 + mapped * (22 -248));
+  document.getElementById('fieldTotal').style.color = `rgb(${r},${g},${b})`;
+  document.getElementById('fieldTotal').style.textShadow = `0 0 30px rgba(${r},${g},${b},0.5)`;
+
+  // Range bar
+  if (fieldMin < fieldMax) {
+    const pct = Math.max(0, Math.min(100, (ftotal - fieldMin) / (fieldMax - fieldMin) * 100));
+    document.getElementById('rangeFill').style.width = pct + '%';
+  }
+  document.getElementById('fieldMin').textContent = 'min: ' + (fieldMin === Infinity ? '—' : fieldMin.toFixed(1));
+  document.getElementById('fieldMax').textContent = 'max: ' + (fieldMax === -Infinity ? '—' : fieldMax.toFixed(1));
+}
+
+function updateAmbient() {
+  const mapped = applyMapping(ftotal);
+  document.body.style.setProperty('--field-glow', (mapped * 0.08).toFixed(3));
+}
+
+// ── Sparkline canvas ──────────────────────────────────────────────────
+function drawSparkline() {
+  const c   = document.getElementById('sparkline');
+  const W   = c.offsetWidth || 460; c.width = W; c.height = 52;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#030507'; ctx.fillRect(0, 0, W, 52);
+
+  if (history.length < 2) return;
+
+  const vals  = history;
+  const hMin  = Math.min(...vals);
+  const hMax  = Math.max(...vals) || 1;
+  const range = hMax - hMin || 1;
+
+  // Gradient fill under curve
+  const grad = ctx.createLinearGradient(0, 0, 0, 52);
+  grad.addColorStop(0, 'rgba(56,189,248,0.35)');
+  grad.addColorStop(1, 'rgba(56,189,248,0.02)');
+
+  ctx.beginPath();
+  vals.forEach((v, i) => {
+    const x = i / (vals.length - 1) * W;
+    const y = 48 - ((v - hMin) / range) * 42;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(W, 52); ctx.lineTo(0, 52); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  vals.forEach((v, i) => {
+    const x = i / (vals.length - 1) * W;
+    const y = 48 - ((v - hMin) / range) * 42;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(56,189,248,0.85)'; ctx.lineWidth = 1.5;
+  ctx.shadowBlur = 5; ctx.shadowColor = '#38bdf8';
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Mapped range overlay
+  if (mapMin <= mapMax) {
+    const x0 = Math.max(0, (mapMin - hMin) / range * W);
+    const x1 = Math.min(W, (mapMax - hMin) / range * W);
+    ctx.fillStyle = 'rgba(249,115,22,0.1)';
+    ctx.fillRect(x0, 0, x1 - x0, 52);
+    ctx.strokeStyle = 'rgba(249,115,22,0.4)'; ctx.lineWidth = 1; ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, 52); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, 0); ctx.lineTo(x1, 52); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Current value line
+  if (hMax > hMin) {
+    const cx2 = W - 2;
+    const cy  = 48 - ((ftotal - hMin) / range) * 42;
+    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx2-6, cy); ctx.lineTo(cx2, cy); ctx.stroke();
+  }
+
+  // Labels
+  ctx.fillStyle = 'rgba(56,189,248,0.5)'; ctx.font = '8px Share Tech Mono'; ctx.setLineDash([]);
+  ctx.fillText(hMax.toFixed(1) + ' μT', 4, 12);
+  ctx.fillText(hMin.toFixed(1) + ' μT', 4, 50);
+}
+
+// ── Mapping visualizer canvas ─────────────────────────────────────────
+function drawMapCanvas() {
+  const c   = document.getElementById('mapCanvas');
+  const W   = c.offsetWidth || 460; c.width = W; c.height = 100;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#030507'; ctx.fillRect(0, 0, W, 100);
+
+  const H = 100;
+  // Grid
+  ctx.strokeStyle = 'rgba(22,32,53,0.8)'; ctx.lineWidth = 1;
+  [0.25,0.5,0.75].forEach(f => {
+    ctx.beginPath(); ctx.moveTo(0, H*(1-f)); ctx.lineTo(W, H*(1-f)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W*f, 0); ctx.lineTo(W*f, H); ctx.stroke();
+  });
+
+  // Draw curve shape (background)
+  ctx.beginPath();
+  for (let px = 0; px <= W; px++) {
+    const t  = px / W;
+    const yt = CURVES[curveType](t);
+    const y  = H - 4 - yt * (H - 8);
+    px === 0 ? ctx.moveTo(px, y) : ctx.lineTo(px, y);
+  }
+  ctx.strokeStyle = 'rgba(167,139,250,0.35)'; ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Current mapped position
+  const mapped  = applyMapping(ftotal);
+  const normRaw = Math.max(0, Math.min(1, (ftotal - mapMin) / Math.max(1, mapMax - mapMin)));
+  const dotX    = normRaw * W;
+  const dotY    = H - 4 - mapped * (H - 8);
+
+  // Vertical line from x-axis to dot
+  ctx.strokeStyle = 'rgba(56,189,248,0.3)'; ctx.lineWidth = 1; ctx.setLineDash([3,4]);
+  ctx.beginPath(); ctx.moveTo(dotX, H); ctx.lineTo(dotX, dotY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Dot
+  ctx.beginPath(); ctx.arc(dotX, dotY, 6, 0, Math.PI*2);
+  ctx.fillStyle = active ? 'var(--vib)' : 'var(--dim)';
+  ctx.shadowBlur = active ? 14 : 0; ctx.shadowColor = 'var(--vib)';
+  ctx.fill(); ctx.shadowBlur = 0;
+
+  // X label: field value
+  ctx.fillStyle = 'rgba(56,189,248,0.6)'; ctx.font = '8px Share Tech Mono';
+  ctx.fillText('← FIELD (' + mapMin + '–' + mapMax + ' μT) →', 4, H - 4);
+
+  // Y label: vib output
+  const { freq, amp } = computeVibParams(mapped);
+  let yLabel = '';
+  if (modTarget === 'freq')      yLabel = freq.toFixed(1) + ' Hz';
+  else if (modTarget === 'amp')  yLabel = (amp*100).toFixed(0) + '%';
+  else                           yLabel = freq.toFixed(1) + 'Hz · ' + (amp*100).toFixed(0) + '%';
+
+  ctx.fillStyle = active ? 'rgba(249,115,22,0.8)' : 'rgba(74,106,133,0.6)';
+  ctx.fillText('↑ VIB OUT: ' + yLabel, 4, 12);
+
+  // Current field label
+  ctx.fillStyle = 'rgba(250,204,21,0.7)';
+  ctx.fillText(ftotal.toFixed(1) + ' μT', dotX + 8, dotY - 4);
+}
+
+// ── Curve thumbnails ──────────────────────────────────────────────────
+function drawCurveThumbs() {
+  Object.entries(CURVES).forEach(([name, fn]) => {
+    const c   = document.getElementById('cc-' + name);
+    if (!c) return;
+    const W   = 48; c.width = W; c.height = 30;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#050a0e'; ctx.fillRect(0,0,W,30);
+    ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x++) {
+      const t = x / W;
+      const y = 27 - fn(t) * 24;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+}
+
+// ── Param controls ────────────────────────────────────────────────────
+function updateMapParam(key, val) {
+  val = parseFloat(val);
+  const setPct = (id, v, mn, mx) => {
+    const p = ((v-mn)/(mx-mn)*100).toFixed(1)+'%';
+    document.getElementById(id).style.setProperty('--pct', p);
+  };
+  if (key === 'min')      { mapMin = val;    document.getElementById('mapMinVal').textContent    = val + ' μT';  setPct('mapMinSlider',   val, 0, 200); }
+  if (key === 'max')      { mapMax = val;    document.getElementById('mapMaxVal').textContent    = val + ' μT';  setPct('mapMaxSlider',   val, 0, 500); }
+  if (key === 'vFreqMin') { vFreqMin = val;  document.getElementById('vFreqMinVal').textContent = val + ' Hz';  setPct('vFreqMinSlider', val, 1, 20);  }
+  if (key === 'vFreqMax') { vFreqMax = val;  document.getElementById('vFreqMaxVal').textContent = val + ' Hz';  setPct('vFreqMaxSlider', val, 1, 30);  }
+  drawMapCanvas();
+}
+
+function selectMod(mode) {
+  modTarget = mode;
+  document.querySelectorAll('.modmap-btn').forEach(b => b.classList.remove('active-mod'));
+  document.getElementById('mod-' + mode).classList.add('active-mod');
+}
+
+function selectCurve(curve) {
+  curveType = curve;
+  document.querySelectorAll('.curve-btn').forEach(b => b.classList.remove('active-curve'));
+  document.getElementById('curve-' + curve).classList.add('active-curve');
+  drawMapCanvas();
+}
+
+// ── Calibration ───────────────────────────────────────────────────────
+function startCalibration() {
+  if (calActive) return;
+  calActive  = true;
+  calSamples = [];
+  log('Calibrating — move the phone around for 5 seconds…', 'warn');
+  document.getElementById('calBtn').textContent = '⏳ 5s…';
+
+  let count = 4;
+  const tick = setInterval(() => {
+    document.getElementById('calBtn').textContent = '⏳ ' + count + 's…';
+    count--;
+    if (count < 0) {
+      clearInterval(tick);
+      finishCalibration();
+    }
+  }, 1000);
+}
+
+function finishCalibration() {
+  calActive = false;
+  document.getElementById('calBtn').textContent = '⊙ CALIBRATE';
+  if (calSamples.length < 5) { log('Not enough samples — is magnetometer active?', 'err'); return; }
+  const sorted = [...calSamples].sort((a,b)=>a-b);
+  const p05 = sorted[Math.floor(sorted.length * 0.05)];
+  const p95 = sorted[Math.floor(sorted.length * 0.95)];
+  mapMin = Math.round(p05 * 10) / 10;
+  mapMax = Math.round(p95 * 10) / 10;
+  document.getElementById('mapMinSlider').value = Math.min(mapMin, 200);
+  document.getElementById('mapMaxSlider').value = Math.min(mapMax, 500);
+  updateMapParam('min', mapMin);
+  updateMapParam('max', mapMax);
+  log(`Calibrated: ${mapMin.toFixed(1)} – ${mapMax.toFixed(1)} μT (${calSamples.length} samples)`, 'ok');
+}
+
+// ── Sensor start/stop ─────────────────────────────────────────────────
+function toggleMapping() {
+  active ? stopMapping() : startMapping();
+}
+
+function startMapping() {
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+ permission flow
+    DeviceOrientationEvent.requestPermission().then(s => {
+      if (s === 'granted') attachSensor();
+      else { log('Permission denied for motion sensors', 'err'); setStatus('no', 'Permission denied'); }
+    }).catch(e => log('Permission error: ' + e, 'err'));
+  } else {
+    attachSensor();
+  }
+}
+
+function attachSensor() {
+  if (!window.DeviceOrientationEvent) {
+    setStatus('no', '✗ DeviceOrientationEvent not available');
+    log('DeviceOrientationEvent not available', 'err');
+    return;
+  }
+
+  window.addEventListener('deviceorientationabsolute', onOrientEvent, true);
+  window.addEventListener('deviceorientation', onOrientEvent, true);
+
+  // Try DeviceMotionEvent for magnetometer on some browsers
+  if (window.DeviceMotionEvent) {
+    // Not all browsers expose mag via DeviceMotion, try both
+  }
+
+  // Primary: use magnetometer via AbsoluteOrientationSensor if available
+  if ('AbsoluteOrientationSensor' in window) {
+    tryAbsOrientSensor();
+  }
+
+  // Best API: Magnetometer
+  if ('Magnetometer' in window) {
+    tryMagnetometer();
+  } else {
+    // Fallback: simulate from deviceorientation
+    log('Magnetometer API not available — using orientation-derived values', 'warn');
+    setStatus('warn', '⚠ Using orientation-derived values (limited accuracy)');
+    activateMapping();
+  }
+}
+
+function tryMagnetometer() {
+  try {
+    const mag = new Magnetometer({ frequency: 10 });
+    mag.addEventListener('reading', () => {
+      onMagEvent({ x: mag.x, y: mag.y, z: mag.z });
+    });
+    mag.addEventListener('error', e => {
+      log('Magnetometer error: ' + e.error.message, 'err');
+      fallbackOrientation();
+    });
+    mag.start();
+    log('Magnetometer API started at 10 Hz', 'ok');
+    setStatus('ok', '✓ Magnetometer active — mapping live');
+    activateMapping();
+  } catch(e) {
+    log('Magnetometer instantiation failed: ' + e.message, 'warn');
+    fallbackOrientation();
+  }
+}
+
+function tryAbsOrientSensor() {
+  try {
+    const s = new AbsoluteOrientationSensor({ frequency: 10 });
+    // This doesn't give raw mag values but is a sign sensors work
+  } catch(e) {}
+}
+
+function fallbackOrientation() {
+  log('Falling back to DeviceOrientationEvent for field estimate', 'warn');
+  setStatus('warn', '⚠ Orientation fallback — may lack accuracy');
+
+  window.addEventListener('deviceorientationabsolute', onOrientFallback, true);
+  window.addEventListener('deviceorientation', onOrientFallback, true);
+  activateMapping();
+}
+
+function onOrientFallback(e) {
+  // Simulate a magnetic field vector from orientation angles as a fallback
+  const alpha = (e.alpha || 0) * Math.PI / 180;
+  const beta  = (e.beta  || 0) * Math.PI / 180;
+  const gamma = (e.gamma || 0) * Math.PI / 180;
+  // Project Earth's field (~50μT) through orientation
+  const Bx = 50 * Math.cos(beta)  * Math.sin(alpha);
+  const By = 50 * Math.cos(beta)  * Math.cos(alpha);
+  const Bz = 50 * Math.sin(beta);
+  onMagEvent({ x: Bx, y: By, z: Bz });
+}
+
+function onOrientEvent(e) {
+  // If we have a real Magnetometer running, ignore redundant orientation events
+}
+
+function activateMapping() {
+  active = true;
+  document.getElementById('fireLbl').textContent = '■ STOP MAPPING';
+  document.getElementById('fireBtn').classList.add('active');
+  log('Mapping ACTIVE — field → vibration engaged', 'ok');
+}
+
+function stopMapping() {
+  active = false;
+  clearTimeout(vibTimer);
+  if ('vibrate' in navigator) navigator.vibrate(0);
+  window.removeEventListener('deviceorientationabsolute', onOrientFallback, true);
+  window.removeEventListener('deviceorientation', onOrientFallback, true);
+  document.getElementById('fireLbl').textContent = '▶ START MAPPING';
+  document.getElementById('fireBtn').classList.remove('active');
+  document.body.style.setProperty('--field-glow', '0');
+  setStatus('pending', 'Mapping stopped — tap START to resume');
+  log('Mapping stopped', 'info');
+  drawMapCanvas();
+}
+
+function setStatus(state, msg) {
+  const dot = document.getElementById('bannerDot');
+  const txt = document.getElementById('bannerText');
+  dot.className = 'dot ' + (state === 'warn' ? 'pending' : state);
+  txt.textContent = msg;
+  txt.style.color = state === 'ok' ? 'var(--ok)' : state === 'no' ? 'var(--danger)' : state === 'warn' ? 'var(--warn)' : 'var(--text)';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  drawCurveThumbs();
+  drawMapCanvas();
+  drawSparkline();
+  log('MagHaptic ready — tap START MAPPING', 'info');
+
+  if (!('vibrate' in navigator)) log('Vibration API not supported — haptic output disabled', 'warn');
+  if (!('Magnetometer' in window) && !window.DeviceOrientationEvent) {
+    setStatus('no', '✗ No sensor APIs available — desktop browser?');
+    log('No sensor APIs detected', 'err');
+  }
+});
+
+window.addEventListener('resize', () => {
+  drawCurveThumbs(); drawMapCanvas(); drawSparkline();
+});
+</script>
+</body>
+</html>
