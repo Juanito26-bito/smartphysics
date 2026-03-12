@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Smartphone as a Physics Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Source+Code+Pro:wght@400;600&family=Lato:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #07101c;
+    background-image: radial-gradient(ellipse at 20% 20%, #0d2a4a44 0%, transparent 60%),
+                      radial-gradient(ellipse at 80% 80%, #1a0d2e33 0%, transparent 60%);
+    font-family: 'Lato', sans-serif;
+    color: #dde4f0;
+    min-height: 100vh;
+    padding: 60px 20px 80px;
+  }
+  header { text-align: center; margin-bottom: 56px; }
+  .overline {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px; letter-spacing: 6px; color: #4fc3f7;
+    text-transform: uppercase; margin-bottom: 14px;
+  }
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(28px, 5vw, 50px);
+    font-weight: 400; color: #fff; line-height: 1.15; margin-bottom: 18px;
+  }
+  h1 em { font-style: italic; color: #4fc3f7; }
+  .subtitle {
+    color: #7a8faa; font-size: 15px; line-height: 1.8;
+    max-width: 500px; margin: 0 auto; font-weight: 300;
+  }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: center; margin-bottom: 56px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 11px; color: #99aabb;
+    font-family: 'Source Code Pro', monospace;
+  }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .timeline { max-width: 900px; margin: 0 auto; position: relative; }
+  .spine {
+    position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+    background: linear-gradient(to bottom, transparent 0%, #1e3a54 4%, #1e3a54 96%, transparent 100%);
+    transform: translateX(-50%);
+  }
+  .year-group { margin-bottom: 48px; animation: fadeIn 0.5s ease both; }
+  .year-badge-wrap {
+    display: flex; justify-content: center;
+    margin-bottom: 22px; position: relative; z-index: 2;
+  }
+  .year-badge {
+    background: linear-gradient(135deg, #0d2440, #112038);
+    border: 1px solid #4fc3f7; border-radius: 30px;
+    padding: 7px 28px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 17px; font-weight: 600; color: #4fc3f7; letter-spacing: 3px;
+    box-shadow: 0 0 24px rgba(79,195,247,0.25), inset 0 0 12px rgba(79,195,247,0.05);
+  }
+  .articles-row { display: flex; flex-direction: column; gap: 14px; }
+  .article-entry { display: flex; position: relative; align-items: flex-start; }
+  .article-entry.left  { justify-content: flex-end;  padding-right: calc(50% + 28px); }
+  .article-entry.right { justify-content: flex-start; padding-left:  calc(50% + 28px); }
+  .spine-dot {
+    position: absolute; left: 50%; top: 18px;
+    transform: translateX(-50%);
+    width: 13px; height: 13px; border-radius: 50%; z-index: 3;
+  }
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 12px; padding: 14px 16px;
+    max-width: 360px; width: 100%; cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  }
+  .card:hover { background: rgba(255,255,255,0.07); }
+  .card-top { display: flex; align-items: flex-start; gap: 10px; }
+  .card-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+  .card-meta { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; flex-wrap: wrap; }
+  .card-num { font-family: 'Source Code Pro', monospace; font-size: 10px; color: #445566; font-weight: 600; }
+  .card-tag { font-size: 10px; padding: 2px 9px; border-radius: 10px; font-family: 'Source Code Pro', monospace; }
+  .card-title { font-size: 13.5px; color: #ccd8ee; line-height: 1.45; font-family: 'Playfair Display', serif; }
+  .card-detail {
+    font-size: 12px; color: #7a8faa; line-height: 1.65;
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    font-weight: 300; display: none;
+  }
+  .card.open .card-detail { display: block; }
+  footer {
+    text-align: center; margin-top: 56px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px; color: #334455; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+  @media (max-width: 600px) {
+    .spine { display: none; }
+    .article-entry.left, .article-entry.right { padding: 0; justify-content: center; }
+    .spine-dot { display: none; }
+    .card { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="overline">Physics Education Research · 2013 – 2025</div>
+  <h1>The Smartphone as a <em>Physics Lab</em></h1>
+  <p class="subtitle">A chronological journey through research showing how mobile devices have transformed experimental physics education — Castro-Palacio et al.</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7;box-shadow:0 0 6px #4fc3f7"></div>Accelerometer</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ce93d8;box-shadow:0 0 6px #ce93d8"></div>Microphone / Sonar</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#81c784;box-shadow:0 0 6px #81c784"></div>Sound Level Meter</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffd54f;box-shadow:0 0 6px #ffd54f"></div>Light / Li-Fi / Camera</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ef9a9a;box-shadow:0 0 6px #ef9a9a"></div>Barometer</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4dd0e1;box-shadow:0 0 6px #4dd0e1"></div>Signal Generator / Oscilloscope</div>
+</div>
+
+<div class="timeline">
+  <div class="spine"></div>
+
+  <!-- 2013 -->
+  <div class="year-group" style="animation-delay:.05s">
+    <div class="year-badge-wrap"><div class="year-badge">2013</div></div>
+    <div class="articles-row">
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#4fc3f7;box-shadow:0 0 10px #4fc3f7"></div>
+        <div class="card" onclick="toggle(this,'#4fc3f7')">
+          <div class="card-top"><div class="card-icon">📳</div><div>
+            <div class="card-meta"><span class="card-num">#16</span><span class="card-tag" style="background:#4fc3f714;color:#4fc3f7;border:1px solid #4fc3f733">Accelerometer</span></div>
+            <div class="card-title">Quantitative analysis of coupled oscillations</div>
+            <div class="card-detail">Mobile accelerometer sensors used to study the dynamics of coupled oscillators — a classic mechanics experiment made accessible via smartphone. <em>European Journal of Physics 34, 737–744.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#4fc3f7;box-shadow:0 0 10px #4fc3f7"></div>
+        <div class="card" onclick="toggle(this,'#4fc3f7')">
+          <div class="card-top"><div class="card-icon">📳</div><div>
+            <div class="card-meta"><span class="card-num">#18</span><span class="card-tag" style="background:#4fc3f714;color:#4fc3f7;border:1px solid #4fc3f733">Accelerometer</span></div>
+            <div class="card-title">Free & damped harmonic oscillations</div>
+            <div class="card-detail">Acceleration sensor records and analyses pendulum and spring oscillation data in real time. <em>American Journal of Physics 81, 472.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2014 -->
+  <div class="year-group" style="animation-delay:.1s">
+    <div class="year-badge-wrap"><div class="year-badge">2014</div></div>
+    <div class="articles-row">
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#4fc3f7;box-shadow:0 0 10px #4fc3f7"></div>
+        <div class="card" onclick="toggle(this,'#4fc3f7')">
+          <div class="card-top"><div class="card-icon">📳</div><div>
+            <div class="card-meta"><span class="card-num">#23</span><span class="card-tag" style="background:#4fc3f714;color:#4fc3f7;border:1px solid #4fc3f733">Accelerometer</span></div>
+            <div class="card-title">Uniform & uniformly accelerated circular motions</div>
+            <div class="card-detail">Smartphone placed on a rotating platform to study both uniform and non-uniform circular motion via its built-in accelerometer. <em>Revista Brasileira de Ensino de Fisica 36–2, 2315.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2015 -->
+  <div class="year-group" style="animation-delay:.15s">
+    <div class="year-badge-wrap"><div class="year-badge">2015</div></div>
+    <div class="articles-row">
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#4fc3f7;box-shadow:0 0 10px #4fc3f7"></div>
+        <div class="card" onclick="toggle(this,'#4fc3f7')">
+          <div class="card-top"><div class="card-icon">📳</div><div>
+            <div class="card-meta"><span class="card-num">#30</span><span class="card-tag" style="background:#4fc3f714;color:#4fc3f7;border:1px solid #4fc3f733">Accelerometer</span></div>
+            <div class="card-title">2D oscillations & Lissajous curves</div>
+            <div class="card-detail">The acceleration sensor traces out Lissajous figures when the phone undergoes two perpendicular simultaneous oscillations. <em>Physics Education 50–5, 580–586.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2017 -->
+  <div class="year-group" style="animation-delay:.2s">
+    <div class="year-badge-wrap"><div class="year-badge">2017</div></div>
+    <div class="articles-row">
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#81c784;box-shadow:0 0 10px #81c784"></div>
+        <div class="card" onclick="toggle(this,'#81c784')">
+          <div class="card-top"><div class="card-icon">🔊</div><div>
+            <div class="card-meta"><span class="card-num">#35</span><span class="card-tag" style="background:#81c78414;color:#81c784;border:1px solid #81c78433">Sound Level Meter</span></div>
+            <div class="card-title">Visualizing acoustical beats</div>
+            <div class="card-detail">Smartphone used as a sound level meter to demonstrate and record the beat phenomenon between two close frequencies. <em>Revista Técnica Industrial 318, 34–38.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#4fc3f7;box-shadow:0 0 10px #4fc3f7"></div>
+        <div class="card" onclick="toggle(this,'#4fc3f7')">
+          <div class="card-top"><div class="card-icon">📳</div><div>
+            <div class="card-meta"><span class="card-num">#37</span><span class="card-tag" style="background:#4fc3f714;color:#4fc3f7;border:1px solid #4fc3f733">Accelerometer</span></div>
+            <div class="card-title">Mechanical beats — direct visualization</div>
+            <div class="card-detail">An oscillating smartphone directly demonstrates mechanical beat phenomena through its own motion, making the abstract concept tangible. <em>The Physics Teacher 55, 424.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2018 -->
+  <div class="year-group" style="animation-delay:.25s">
+    <div class="year-badge-wrap"><div class="year-badge">2018</div></div>
+    <div class="articles-row">
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#ffd54f;box-shadow:0 0 10px #ffd54f"></div>
+        <div class="card" onclick="toggle(this,'#ffd54f')">
+          <div class="card-top"><div class="card-icon">💡</div><div>
+            <div class="card-meta"><span class="card-num">#41</span><span class="card-tag" style="background:#ffd54f14;color:#ffd54f;border:1px solid #ffd54f33">Light Sensor</span></div>
+            <div class="card-title">Characterizing linear light sources</div>
+            <div class="card-detail">Ambient light sensor measures intensity profiles of fluorescent tubes and LEDs, revealing how light is distributed along a linear source. <em>The Physics Teacher 56, 562.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#4fc3f7;box-shadow:0 0 10px #4fc3f7"></div>
+        <div class="card" onclick="toggle(this,'#4fc3f7')">
+          <div class="card-top"><div class="card-icon">📳</div><div>
+            <div class="card-meta"><span class="card-num">#42</span><span class="card-tag" style="background:#4fc3f714;color:#4fc3f7;border:1px solid #4fc3f733">Accelerometer</span></div>
+            <div class="card-title">Forced oscillations visualization</div>
+            <div class="card-detail">Smartphone placed on a vibrating platform to visualise resonance and forced oscillation behaviour interactively. <em>Revista Española de Física 32(4).</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2022 -->
+  <div class="year-group" style="animation-delay:.3s">
+    <div class="year-badge-wrap"><div class="year-badge">2022</div></div>
+    <div class="articles-row">
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#ce93d8;box-shadow:0 0 10px #ce93d8"></div>
+        <div class="card" onclick="toggle(this,'#ce93d8')">
+          <div class="card-top"><div class="card-icon">🎙️</div><div>
+            <div class="card-meta"><span class="card-num">#60</span><span class="card-tag" style="background:#ce93d814;color:#ce93d8;border:1px solid #ce93d833">Microphone</span></div>
+            <div class="card-title">Acoustic characterization of magnetic braking</div>
+            <div class="card-detail">Acoustic methods via smartphone microphone used to characterise the velocity-dependent braking force in a magnetic damper. <em>The Physics Teacher 60, 706–707.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2023 -->
+  <div class="year-group" style="animation-delay:.35s">
+    <div class="year-badge-wrap"><div class="year-badge">2023</div></div>
+    <div class="articles-row">
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#ce93d8;box-shadow:0 0 10px #ce93d8"></div>
+        <div class="card" onclick="toggle(this,'#ce93d8')">
+          <div class="card-top"><div class="card-icon">🎙️</div><div>
+            <div class="card-meta"><span class="card-num">#62</span><span class="card-tag" style="background:#ce93d814;color:#ce93d8;border:1px solid #ce93d833">Microphone · Sonar</span></div>
+            <div class="card-title">Acoustic determination of g</div>
+            <div class="card-detail">Smartphone used as a sonar — emitting a sound pulse and tracking its echo off a free-falling body — to determine gravitational acceleration. <em>Phys. Educ. 58, 035011.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#ef9a9a;box-shadow:0 0 10px #ef9a9a"></div>
+        <div class="card" onclick="toggle(this,'#ef9a9a')">
+          <div class="card-top"><div class="card-icon">🌡️</div><div>
+            <div class="card-meta"><span class="card-num">#63</span><span class="card-tag" style="background:#ef9a9a14;color:#ef9a9a;border:1px solid #ef9a9a33">Barometer</span></div>
+            <div class="card-title">Barometric study of a draining container</div>
+            <div class="card-detail">Pressure sensor characterises how air pressure inside a sealed draining container evolves over time, connecting fluid dynamics with gas laws. <em>Phys. Educ. 58, 055017.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2024 -->
+  <div class="year-group" style="animation-delay:.4s">
+    <div class="year-badge-wrap"><div class="year-badge">2024</div></div>
+    <div class="articles-row">
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#ce93d8;box-shadow:0 0 10px #ce93d8"></div>
+        <div class="card" onclick="toggle(this,'#ce93d8')">
+          <div class="card-top"><div class="card-icon">🎙️</div><div>
+            <div class="card-meta"><span class="card-num">#69</span><span class="card-tag" style="background:#ce93d814;color:#ce93d8;border:1px solid #ce93d833">Microphone</span></div>
+            <div class="card-title">Inverse-square law via IR remote control</div>
+            <div class="card-detail">Acoustic detection of an IR remote's signal strength at varying distances tests the inverse-square law in a novel optics-acoustics hybrid experiment. <em>Physics Education 59, 035016.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#4dd0e1;box-shadow:0 0 10px #4dd0e1"></div>
+        <div class="card" onclick="toggle(this,'#4dd0e1')">
+          <div class="card-top"><div class="card-icon">📡</div><div>
+            <div class="card-meta"><span class="card-num">#70</span><span class="card-tag" style="background:#4dd0e114;color:#4dd0e1;border:1px solid #4dd0e133">Signal Generator</span></div>
+            <div class="card-title">Q-factor of a series RLC circuit</div>
+            <div class="card-detail">Smartphone acts as a function generator to sweep frequency across an RLC circuit, allowing precise measurement of the quality factor. <em>Physics Education 59, 065023.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#4dd0e1;box-shadow:0 0 10px #4dd0e1"></div>
+        <div class="card" onclick="toggle(this,'#4dd0e1')">
+          <div class="card-top"><div class="card-icon">📡</div><div>
+            <div class="card-meta"><span class="card-num">#71</span><span class="card-tag" style="background:#4dd0e114;color:#4dd0e1;border:1px solid #4dd0e133">Sig. Gen + Oscilloscope</span></div>
+            <div class="card-title">Portable RLC series circuit lab</div>
+            <div class="card-detail">Two smartphones — one as signal generator, one as oscilloscope — create a fully portable electronics laboratory for RLC experiments. <em>Physics Education 59, 015016.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#4dd0e1;box-shadow:0 0 10px #4dd0e1"></div>
+        <div class="card" onclick="toggle(this,'#4dd0e1')">
+          <div class="card-top"><div class="card-icon">📡</div><div>
+            <div class="card-meta"><span class="card-num">#75</span><span class="card-tag" style="background:#4dd0e114;color:#4dd0e1;border:1px solid #4dd0e133">Signal Generator</span></div>
+            <div class="card-title">Internal resistance of a non-ideal inductor</div>
+            <div class="card-detail">Smartphone-driven resonance experiments reveal the parasitic internal resistance of real inductors in series RLC circuits. <em>Physics Education 59, 045004.</em></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="article-entry left">
+        <div class="spine-dot" style="background:#ffd54f;box-shadow:0 0 10px #ffd54f"></div>
+        <div class="card" onclick="toggle(this,'#ffd54f')">
+          <div class="card-top"><div class="card-icon">💡</div><div>
+            <div class="card-meta"><span class="card-num">#76</span><span class="card-tag" style="background:#ffd54f14;color:#ffd54f;border:1px solid #ffd54f33">Li-Fi Signal Generator</span></div>
+            <div class="card-title">Wireless Li-Fi signal generator for RC circuits</div>
+            <div class="card-detail">A Li-Fi (light-based wireless) signal generator built with a smartphone sends driving signals to a series RC circuit without any physical connections. <em>The Physics Teacher 62, 426–427.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2025 -->
+  <div class="year-group" style="animation-delay:.45s">
+    <div class="year-badge-wrap"><div class="year-badge">2025</div></div>
+    <div class="articles-row">
+      <div class="article-entry right">
+        <div class="spine-dot" style="background:#ffd54f;box-shadow:0 0 10px #ffd54f"></div>
+        <div class="card" onclick="toggle(this,'#ffd54f')">
+          <div class="card-top"><div class="card-icon">💡</div><div>
+            <div class="card-meta"><span class="card-num">#81</span><span class="card-tag" style="background:#ffd54f14;color:#ffd54f;border:1px solid #ffd54f33">Solar Cell + Camera</span></div>
+            <div class="card-title">Beat phenomenon between two light beams</div>
+            <div class="card-detail">Two amplitude-modulated light beams detected by a solar cell; the smartphone camera captures the resulting beat pattern, merging optics and wave physics. <em>The Physics Teacher 63, 481–483.</em></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Click any card to expand details · 13 articles · Castro-Palacio et al. research group</footer>
+
+<script>
+function toggle(card, color) {
+  card.classList.toggle('open');
+  if (card.classList.contains('open')) {
+    card.style.borderColor = color;
+    card.style.boxShadow = '0 4px 24px ' + color + '33';
+    card.style.background = 'rgba(255,255,255,0.07)';
+  } else {
+    card.style.borderColor = '';
+    card.style.boxShadow = '';
+    card.style.background = '';
+  }
+}
+</script>
+</body>
+</html>
